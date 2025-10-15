@@ -166,15 +166,26 @@ async def main():
                     break
             console.print()
     
-    # Save results to JSON
-    results_file = Path("evals/results.json")
+    # Create run-specific directory
+    run_dir = Path(f"evals/data/{run_id}")
+    run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save results to JSON in run directory
+    results_file = run_dir / "results.json"
     with open(results_file, 'w') as f:
         json.dump(results, f, indent=2)
     
     console.print(f"\n[dim]Full results saved to {results_file}[/dim]")
     
-    # Save results to CSV
-    csv_file = Path(f"evals/data/escalation_eval_{run_id}.csv")
+    # Save test cases to run directory
+    test_cases_file = run_dir / "escalation_tests.json"
+    with open(test_cases_file, 'w') as f:
+        json.dump(dataset_data, f, indent=2)
+    
+    console.print(f"[dim]Test cases saved to {test_cases_file}[/dim]")
+    
+    # Save results to CSV in run directory
+    csv_file = run_dir / "escalation_eval.csv"
     
     with open(csv_file, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=[

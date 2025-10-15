@@ -79,9 +79,10 @@ This will:
 - Run all tests in parallel for faster execution
 - Check if escalation behavior matches expectations using `escalation_scorer`
 - Display results with pass/fail summary
-- Save results to:
-  - JSON: `evals/results.json`
-  - CSV: `evals/data/escalation_eval_<timestamp>.csv`
+- Save results to run-specific directory:
+  - `evals/data/<run_id>/results.json` - Full evaluation results
+  - `evals/data/<run_id>/escalation_tests.json` - Test cases used
+  - `evals/data/<run_id>/escalation_eval.csv` - CSV summary
 
 ### Adding Test Cases
 
@@ -118,7 +119,11 @@ telehealth-agent/
 ├── evals/                   # Evaluation framework
 │   ├── framework.py         # Eval framework (Dataset, scorer)
 │   ├── escalation_tests.json # Test cases for escalation behavior
-│   └── data/                # Eval results (gitignored)
+│   └── data/                # Evaluation results organized by run ID
+│       └── <run_id>/        # Each evaluation run gets its own directory
+│           ├── results.json
+│           ├── escalation_tests.json
+│           └── escalation_eval.csv
 ├── docs/                    # Documentation
 │   ├── CLAUDE.md            # Claude Code guidance
 │   ├── DESIGN.md            # Design philosophy

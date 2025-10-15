@@ -6,7 +6,7 @@ This implementation refactored the telehealth chatbot into a reusable service ar
 
 ## Components Created
 
-### 1. TelehealthService (`telehealth_service.py`)
+### 1. TelehealthService (`src/telehealth_service.py`)
 
 A durable service class that manages agent interactions with session persistence:
 
@@ -29,7 +29,7 @@ Session(
 )
 ```
 
-### 2. CLI (`telehealth_bot.py`)
+### 2. CLI (`src/telehealth_bot.py`)
 
 Streamlined interactive CLI that uses the service:
 
@@ -89,7 +89,7 @@ async def run_eval(dataset, function, scorer_fn) -> dict:
 - General health info (should not escalate)
 - Appointment management (should not escalate)
 
-### 5. Eval Runner (`run_evals.py`)
+### 5. Eval Runner (`src/run_evals.py`)
 
 Executable script that:
 - Loads test dataset
@@ -112,22 +112,28 @@ telehealth_bot.py (monolithic)
 
 ### After:
 ```
-telehealth_service.py (reusable service)
-├── Tools
-├── Session management
-├── Agent logic
-└── Streaming support
-
-telehealth_bot.py (thin CLI)
-└── User interface only
+src/
+├── telehealth_service.py (reusable service)
+│   ├── Tools
+│   ├── Session management
+│   ├── Agent logic
+│   └── Streaming support
+├── telehealth_bot.py (thin CLI)
+│   └── User interface only
+└── run_evals.py (eval runner)
+    └── Orchestrates testing
 
 evals/ (evaluation framework)
 ├── framework.py (Dataset, runner, scorer)
 ├── escalation_tests.json (test cases)
-└── results.json (generated)
+└── data/ (results)
 
-run_evals.py (eval runner)
-└── Orchestrates testing
+docs/ (documentation)
+├── CLAUDE.md
+├── DESIGN.md
+├── FEATURES.md
+├── IMPLEMENTATION.md
+└── TESTING_GUIDE.md
 ```
 
 ## Benefits
@@ -160,12 +166,12 @@ run_evals.py (eval runner)
 ### CLI Usage
 ```bash
 # Interactive chat with streaming
-uv run python telehealth_bot.py
+uv run python src/telehealth_bot.py
 ```
 
 ### Programmatic Usage
 ```python
-from telehealth_service import TelehealthService
+from src.telehealth_service import TelehealthService
 
 service = TelehealthService()
 
@@ -181,7 +187,7 @@ async for chunk in service.stream_message("session-456", "Can I refill my prescr
 
 ### Running Evals
 ```bash
-uv run python run_evals.py
+uv run python src/run_evals.py
 ```
 
 ## Testing Escalation Behavior
@@ -201,16 +207,19 @@ The scorer detects escalation by looking for:
 ## Files Changed/Created
 
 ### Created:
-- `telehealth_service.py` - Core service with session management
+- `src/telehealth_service.py` - Core service with session management
+- `src/telehealth_bot.py` - Streamlined CLI
+- `src/run_evals.py` - Eval runner script
 - `evals/framework.py` - Evaluation framework
 - `evals/escalation_tests.json` - Test cases
-- `run_evals.py` - Eval runner script
 - `.gitignore` - Ignore session directories
 - `README.md` - Usage documentation
-- `IMPLEMENTATION.md` - This file
-
-### Modified:
-- `telehealth_bot.py` - Now uses service, supports streaming
+- `docs/` - Documentation directory
+  - `docs/CLAUDE.md` - Claude Code guidance
+  - `docs/DESIGN.md` - Design philosophy
+  - `docs/FEATURES.md` - Feature documentation
+  - `docs/IMPLEMENTATION.md` - This file
+  - `docs/TESTING_GUIDE.md` - Testing guide
 
 ## Next Steps
 

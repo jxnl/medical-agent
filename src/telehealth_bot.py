@@ -5,235 +5,248 @@ Uses TelehealthService for agent logic.
 """
 
 import asyncio
-import argparse
+import json
 import logging
-import uuid
-from pathlib import Path
+from typing import Optional
+import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.json import JSON
+from rich.text import Text
+from rich.markdown import Markdown
+from rich.align import Align
+from rich.columns import Columns
 from src.telehealth_service import TelehealthService
 
 console = Console()
+app = typer.Typer()
 
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-def list_sessions(service: TelehealthService):
-    """List available sessions"""
-    sessions_dir = Path(service.sessions_dir)
-    if not sessions_dir.exists():
-        return []
-    
-    session_files = list(sessions_dir.glob("*.json"))
-    sessions = []
-    
-    for session_file in session_files:
-        session_id = session_file.stem
-        session = service.load_session(session_id)
-        sessions.append({
-            "id": session_id,
-            "created_at": session.created_at,
-            "updated_at": session.updated_at,
-            "message_count": len(session.messages)
-        })
-    
-    return sorted(sessions, key=lambda x: x["updated_at"], reverse=True)
-
-
-def display_session_history(session):
-    """Display previous conversation history"""
-    console.print(Panel(
-        "[bold]Previous Conversation[/bold]",
-        border_style="cyan"
-    ))
-    
-    for msg in session.messages:
-        if msg["role"] == "user":
-            console.print(f"\n[bold green]You:[/bold green] {msg['content']}")
-        elif msg["role"] == "assistant":
-            console.print(f"\n[bold blue]Assistant:[/bold blue] {msg['content']}")
-
-
-async def chat_loop(session_id: str = None):
+async def chat_loop(prefilled_message: Optional[str] = None):
     """Main chat loop"""
-    # Initialize service
-    service = TelehealthService()
+    # Beautiful welcome screen
+    welcome_text = Text()
+    welcome_text.append("🏥 ", style="bold cyan")
+    welcome_text.append("Telehealth Assistant", style="bold cyan")
     
-    # Handle session selection
-    if session_id:
-        # Load existing session
-        session = service.load_session(session_id)
-        if session.messages:
-            display_session_history(session)
-            console.print("\n[dim]Continuing conversation...[/dim]\n")
-        else:
-            console.print("[yellow]Session not found, starting new conversation[/yellow]\n")
-            session_id = str(uuid.uuid4())
-    else:
-        # Check if there are existing sessions
-        sessions = list_sessions(service)
-        
-        if sessions:
-            console.print(Panel(
-                "[bold]Available Sessions[/bold]",
-                border_style="cyan"
-            ))
-            
-            table = Table(show_header=True, header_style="bold magenta")
-            table.add_column("#", width=4)
-            table.add_column("Session ID", width=38)
-            table.add_column("Messages", width=10)
-            table.add_column("Last Updated", width=25)
-            
-            for i, sess in enumerate(sessions[:5], 1):  # Show last 5 sessions
-                table.add_row(
-                    str(i),
-                    sess["id"][:36],
-                    str(sess["message_count"]),
-                    sess["updated_at"]
-                )
-            
-            console.print(table)
-            console.print("\n[dim]Start a new conversation or use --session <id> to continue[/dim]\n")
-        
-        # Create new session
-        session_id = str(uuid.uuid4())
+    console.print()
+    console.print(Align.center(welcome_text))
+    console.print()
     
-    console.print(Panel.fit(
-        "[bold cyan]Telehealth Assistant[/bold cyan]\n"
-        "Hello! I'm here to help you with:\n\n"
-        "- Refilling prescriptions that are already on file\n"
-        "- Checking in for appointments or canceling them\n"
-        "- Connecting you with healthcare providers for other needs\n\n"
-        "[bold yellow]Important:[/bold yellow] For medical questions, symptoms, or health concerns, "
-        "I'll connect you with a healthcare professional right away.\n\n"
-        "Type 'quit' or 'exit' when you're done.",
-        border_style="cyan"
-    ))
+    # Features panel
+    features = Panel(
+        "[bold]I can help you with:[/bold]\n\n"
+        "💊 Refilling prescriptions that are already on file\n"
+        "📅 Checking in for appointments or canceling them\n"
+        "🏥 Connecting you with healthcare providers\n"
+        "❓ Answering general health questions",
+        title="[bold green]Services[/bold green]",
+        border_style="green",
+        padding=(1, 2)
+    )
     
-    console.print(f"\n[dim]Session ID: {session_id}[/dim]\n")
+    # Important notice
+    notice = Panel(
+        "[bold yellow]⚠️  Important:[/bold yellow] For medical questions, symptoms, or health concerns, "
+        "I'll connect you with a healthcare professional right away.",
+        border_style="yellow",
+        padding=(1, 2)
+    )
+    
+    console.print(features)
+    console.print(notice)
+    console.print()
+    console.print("[dim]Type 'quit' or 'exit' when you're done.[/dim]")
+    console.print()
+    
+    async with TelehealthService() as service:
+        while True:
+            # Get user input
+            if prefilled_message:
+                user_input = prefilled_message
+                console.print(f"\n[bold green]You:[/bold green] {user_input}")
+                prefilled_message = None  # Only use prefilled message once
+            else:
+                user_input = console.input("\n[bold green]You:[/bold green] ").strip()
 
-    while True:
-        # Get user input
-        user_input = console.input("\n[bold green]You:[/bold green] ").strip()
+            if user_input.lower() in ['quit', 'exit', 'bye']:
+                goodbye_text = Text()
+                goodbye_text.append("👋 ", style="bold cyan")
+                goodbye_text.append("Thank you for using our telehealth service!", style="bold cyan")
+                console.print()
+                console.print(Align.center(goodbye_text))
+                console.print(Align.center("[dim]Take care and stay healthy![/dim]"))
+                console.print()
+                break
 
-        if user_input.lower() in ['quit', 'exit', 'bye']:
-            console.print(Panel(
-                "Thank you for using our telehealth service. Take care!",
-                title="[bold cyan]Goodbye[/bold cyan]",
-                border_style="cyan",
-                padding=(1, 2)
-            ))
-            break
+            if not user_input:
+                continue
 
-        if not user_input:
-            continue
-
-        try:
-            # Stream message from service
-            response_text = ""
-            tool_calls = []
-            escalated = False
-            
-            console.print("\n[bold blue]Assistant:[/bold blue] ", end="")
-            
-            async for chunk in service.stream_message(session_id, user_input):
-                if chunk["type"] == "text":
-                    # Print text as it streams
-                    console.print(chunk["text"], end="")
-                    response_text += chunk["text"]
+            try:
+                # Stream message from service
+                response_text = ""
+                tool_calls = []
+                escalated = False
+                prefix_printed = False
                 
-                elif chunk["type"] == "tool_use":
-                    tool_calls.append({
-                        "name": chunk["tool_name"],
-                        "input": chunk["tool_input"]
-                    })
+                # Show thinking message with spinner
+                thinking_text = Text()
+                thinking_text.append("🤔 ", style="dim")
+                thinking_text.append("Thinking...", style="dim italic")
+                console.print(thinking_text)
+                
+                async for chunk in service.stream_message(user_input):
+                    if chunk["type"] == "text":
+                        # Print prefix only when first text chunk arrives
+                        if not prefix_printed:
+                            assistant_text = Text()
+                            assistant_text.append("🤖 ", style="bold blue")
+                            assistant_text.append("Assistant:", style="bold blue")
+                            console.print(f"\n{assistant_text} ", end="")
+                            prefix_printed = True
+                        # Print text as it streams
+                        console.print(chunk["text"], end="")
+                        response_text += chunk["text"]
                     
-                    # Check if it's an escalation
-                    if chunk["tool_name"] == "mcp__telehealth-tools__escalate_to_human":
-                        escalated = True
+                    elif chunk["type"] == "tool_use":
+                        tool_calls.append({
+                            "name": chunk["tool_name"],
+                            "input": chunk["tool_input"]
+                        })
+                        
+                        # Display tool call info with pretty formatting
+                        tool_name = chunk["tool_name"].replace("mcp__telehealth-tools__", "")
+                        tool_input = chunk["tool_input"]
+                        
+                        # Create a beautiful tool call panel
+                        is_escalation = chunk["tool_name"] == "mcp__telehealth-tools__escalate_to_human"
+                        
+                        if is_escalation:
+                            tool_panel_content = f"[bold red]🚨 Tool:[/bold red] {tool_name}\n"
+                            if tool_input:
+                                tool_panel_content += "[bold red]📋 Parameters:[/bold red]\n"
+                                for key, value in tool_input.items():
+                                    if isinstance(value, (dict, list)):
+                                        json_str = json.dumps(value, indent=2)
+                                        tool_panel_content += f"  [dim]• {key}:[/dim] {json_str}\n"
+                                    else:
+                                        tool_panel_content += f"  [dim]• {key}:[/dim] {value}\n"
+                            
+                            tool_panel = Panel(
+                                tool_panel_content.strip(),
+                                title="[bold red]⚠️ Escalation Tool[/bold red]",
+                                border_style="red",
+                                padding=(0, 1)
+                            )
+                        else:
+                            tool_panel_content = f"[bold cyan]🔧 Tool:[/bold cyan] {tool_name}\n"
+                            
+                            if tool_input:
+                                tool_panel_content += "[bold cyan]📋 Parameters:[/bold cyan]\n"
+                                for key, value in tool_input.items():
+                                    if isinstance(value, (dict, list)):
+                                        json_str = json.dumps(value, indent=2)
+                                        tool_panel_content += f"  [dim]• {key}:[/dim] {json_str}\n"
+                                    else:
+                                        tool_panel_content += f"  [dim]• {key}:[/dim] {value}\n"
+                            
+                            tool_panel = Panel(
+                                tool_panel_content.strip(),
+                                title="[bold cyan]Tool Execution[/bold cyan]",
+                                border_style="cyan",
+                                padding=(0, 1)
+                            )
+                        console.print(tool_panel)
+                    
+                    elif chunk["type"] == "tool_result":
+                        # Display tool response
+                        tool_name = chunk["tool_name"].replace("mcp__telehealth-tools__", "")
+                        tool_result = chunk["tool_result"]
+                        is_escalation = chunk["tool_name"] == "mcp__telehealth-tools__escalate_to_human"
+                        
+                        # Format tool result content
+                        result_content = ""
+                        if isinstance(tool_result, list):
+                            for item in tool_result:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    result_content += item.get("text", "")
+                                else:
+                                    result_content += str(item)
+                        else:
+                            result_content = str(tool_result)
+                        
+                        if is_escalation:
+                            result_panel = Panel(
+                                f"[bold red]🚨 Escalation Response:[/bold red]\n\n{result_content}",
+                                title=f"[bold red]⚠️ {tool_name} Result[/bold red]",
+                                border_style="red",
+                                padding=(0, 1)
+                            )
+                        else:
+                            result_panel = Panel(
+                                f"[bold green]✅ Tool Response:[/bold green]\n\n{result_content}",
+                                title=f"[bold green]📋 {tool_name} Result[/bold green]",
+                                border_style="green",
+                                padding=(0, 1)
+                            )
+                        console.print(result_panel)
+                        
+                        # Check if it's an escalation
+                        if chunk["tool_name"] == "mcp__telehealth-tools__escalate_to_human":
+                            escalated = True
+                            console.print()
+                            escalation_panel = Panel(
+                                "🚨 [bold red]Escalating to healthcare provider[/bold red]\n\n"
+                                "A healthcare professional will be with you shortly.",
+                                title="[bold red]⚠️ Escalation[/bold red]",
+                                border_style="red",
+                                padding=(1, 2)
+                            )
+                            console.print(escalation_panel)
+                            # Reset prefix flag for continuation after escalation
+                            prefix_printed = False
+                    
+                    elif chunk["type"] == "done":
                         console.print("\n")
-                        console.print(Panel(
-                            "Escalating to healthcare provider",
-                            title="[bold red]Escalation[/bold red]",
-                            border_style="red",
-                            padding=(1, 2)
-                        ))
-                        console.print("[bold blue]Assistant:[/bold blue] ", end="")
-                
-                elif chunk["type"] == "done":
-                    console.print("\n")
-                    if not response_text:
-                        console.print(Panel(
-                            "I received your request but couldn't generate a response.",
-                            title="[bold yellow]Assistant[/bold yellow]",
-                            border_style="yellow",
-                            padding=(1, 2)
-                        ))
+                        
+                        if not response_text:
+                            error_panel = Panel(
+                                "😕 [bold yellow]I received your request but couldn't generate a response.[/bold yellow]\n\n"
+                                "Please try rephrasing your question or contact support if the issue persists.",
+                                title="[bold yellow]⚠️ Error[/bold yellow]",
+                                border_style="yellow",
+                                padding=(1, 2)
+                            )
+                            console.print(error_panel)
 
-        except Exception as e:
-            import traceback
-            console.print(Panel(
-                f"Error: {str(e)}\n\n[dim]{traceback.format_exc()}[/dim]",
-                title="[bold red]Error[/bold red]",
-                border_style="red",
-                padding=(1, 2)
-            ))
+            except Exception as e:
+                import traceback
+                error_panel = Panel(
+                    f"🚨 [bold red]An error occurred:[/bold red] {str(e)}\n\n"
+                    f"[dim]Technical details:[/dim]\n{traceback.format_exc()}",
+                    title="[bold red]❌ Error[/bold red]",
+                    border_style="red",
+                    padding=(1, 2)
+                )
+                console.print(error_panel)
 
 
-async def main():
-    """Entry point"""
-    parser = argparse.ArgumentParser(description="Telehealth Assistant CLI")
-    parser.add_argument(
-        "--session",
-        "-s",
-        type=str,
-        help="Continue a previous session by providing the session ID"
-    )
-    parser.add_argument(
-        "--list-sessions",
-        "-l",
-        action="store_true",
-        help="List all available sessions"
-    )
+@app.command()
+def chat(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    prefilled_message: Optional[str] = typer.Option(None, "--prefill", "-p", help="Prefill chat with this message")
+):
+    """Start the telehealth chatbot interactive session"""
+    if verbose:
+        logging.getLogger().setLevel(logging.INFO)
     
-    args = parser.parse_args()
-    
-    if args.list_sessions:
-        service = TelehealthService()
-        sessions = list_sessions(service)
-        
-        if not sessions:
-            console.print("[yellow]No sessions found[/yellow]")
-            return
-        
-        table = Table(show_header=True, header_style="bold magenta", title="Available Sessions")
-        table.add_column("Session ID", width=40)
-        table.add_column("Messages", width=10)
-        table.add_column("Created", width=25)
-        table.add_column("Last Updated", width=25)
-        
-        for sess in sessions:
-            table.add_row(
-                sess["id"],
-                str(sess["message_count"]),
-                sess["created_at"],
-                sess["updated_at"]
-            )
-        
-        console.print(table)
-        console.print(f"\n[dim]Use --session <id> to continue a conversation[/dim]")
-        return
-    
-    await chat_loop(session_id=args.session)
-
-
-if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(chat_loop(prefilled_message))
     except KeyboardInterrupt:
         console.print(Panel(
             "Goodbye!",
@@ -241,3 +254,13 @@ if __name__ == "__main__":
             border_style="cyan",
             padding=(1, 2)
         ))
+
+
+@app.command()
+def version():
+    """Show version information"""
+    console.print("Telehealth Bot v0.1.0")
+
+
+if __name__ == "__main__":
+    app()

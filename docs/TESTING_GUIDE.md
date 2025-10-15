@@ -3,7 +3,7 @@
 ## Running the Bot
 
 ```bash
-uv run python telehealth_bot.py
+uv run python src/telehealth_bot.py
 ```
 
 ## Test Scenarios

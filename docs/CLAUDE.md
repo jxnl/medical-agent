@@ -12,14 +12,14 @@ This is a telehealth chatbot built with the Claude Agent SDK that handles prescr
 
 ```bash
 # Interactive CLI with streaming responses
-uv run python telehealth_bot.py
+uv run python src/telehealth_bot.py
 ```
 
 ### Running Tests
 
 ```bash
 # Run evaluation framework on escalation behavior
-uv run python run_evals.py
+uv run python src/run_evals.py
 ```
 
 ### Dependencies
@@ -33,14 +33,14 @@ uv sync
 
 ### Core Components
 
-**TelehealthService** (`telehealth_service.py`)
+**TelehealthService** (`src/telehealth_service.py`)
 - Reusable service class that manages agent interactions
 - Session-based conversation storage in `.sessions/` directory
 - Two modes: `send_message()` for complete responses, `stream_message()` for real-time streaming
 - Handles tool orchestration and conversation history persistence
 - All tool definitions are in this file (7 total tools)
 
-**CLI** (`telehealth_bot.py`)
+**CLI** (`src/telehealth_bot.py`)
 - Thin wrapper around TelehealthService
 - Provides interactive interface with streaming support
 - Visual escalation indicators for user feedback
@@ -60,7 +60,7 @@ uv sync
 ## Critical Safety Logic
 
 ### Controlled Substances Detection
-Located in `telehealth_service.py:18-24` - The `CONTROLLED_SUBSTANCES` set contains all DEA-scheduled medications that MUST trigger immediate escalation. This list is checked in `check_refill_eligibility` before any refill processing.
+Located in `src/telehealth_service.py:18-24` - The `CONTROLLED_SUBSTANCES` set contains all DEA-scheduled medications that MUST trigger immediate escalation. This list is checked in `check_refill_eligibility` before any refill processing.
 
 ### Refill Eligibility Checks (in order)
 1. Controlled substance detection - immediate escalation
@@ -74,7 +74,7 @@ Located in `telehealth_service.py:18-24` - The `CONTROLLED_SUBSTANCES` set conta
 
 ## System Prompt Philosophy
 
-Located in `telehealth_service.py:505-555` - The system prompt defines the agent's personality and escalation policy:
+Located in `src/telehealth_service.py:505-555` - The system prompt defines the agent's personality and escalation policy:
 
 **Tone**: 9th-grade reading level, warm and conversational, explains "why" not just "no"
 
@@ -155,17 +155,17 @@ Tools return dicts with:
 All safety logic is in `check_refill_eligibility` (lines 125-228). Add new checks as sequential if-statements before the final "eligible" return.
 
 ### Adding New Tools
-1. Define tool with `@tool` decorator in `telehealth_service.py`
+1. Define tool with `@tool` decorator in `src/telehealth_service.py`
 2. Add to `telehealth_server` tools list (line 493)
 3. Add to `allowed_tools` list in both `send_message` and `stream_message` (lines 613-621 and 691-699)
 4. Update system prompt if behavior changes
 
 ### Updating Escalation Policy
-Modify `SYSTEM_PROMPT` in `telehealth_service.py:505-555`. Test changes by running evals to ensure no regressions in escalation behavior.
+Modify `SYSTEM_PROMPT` in `src/telehealth_service.py:505-555`. Test changes by running evals to ensure no regressions in escalation behavior.
 
 ## Documentation Files
 
-- **DESIGN.md**: Detailed design philosophy, safety checks, escalation triggers, and future enhancements
-- **IMPLEMENTATION.md**: Architecture overview, component descriptions, and refactoring history
-- **TESTING_GUIDE.md**: Manual testing scenarios with expected behaviors and mock data reference
+- **docs/DESIGN.md**: Detailed design philosophy, safety checks, escalation triggers, and future enhancements
+- **docs/IMPLEMENTATION.md**: Architecture overview, component descriptions, and refactoring history
+- **docs/TESTING_GUIDE.md**: Manual testing scenarios with expected behaviors and mock data reference
 - **README.md**: User-facing documentation for installation and usage

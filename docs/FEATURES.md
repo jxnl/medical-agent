@@ -179,21 +179,21 @@ evals/data/*.csv
 
 ### Start a conversation
 ```bash
-uv run python telehealth_bot.py
+uv run python src/telehealth_bot.py
 ```
 
 ### Continue where you left off
 ```bash
 # List sessions
-uv run python telehealth_bot.py -l
+uv run python src/telehealth_bot.py -l
 
 # Continue specific session
-uv run python telehealth_bot.py -s abc123-def456-...
+uv run python src/telehealth_bot.py -s abc123-def456-...
 ```
 
 ### Run evals
 ```bash
-uv run python run_evals.py
+uv run python src/run_evals.py
 # Results saved to:
 # - evals/results.json
 # - evals/data/escalation_eval_<timestamp>.csv
@@ -201,7 +201,7 @@ uv run python run_evals.py
 
 ### Use service programmatically
 ```python
-from telehealth_service import TelehealthService
+from src.telehealth_service import TelehealthService
 
 service = TelehealthService()
 

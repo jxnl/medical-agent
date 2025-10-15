@@ -561,6 +561,37 @@ class TelehealthService:
         self.sessions_dir = Path(sessions_dir)
         self.sessions_dir.mkdir(exist_ok=True)
         self.version = "0.1.0"  # Agent version
+        
+        # Configure agent options
+        self.options = ClaudeAgentOptions(
+            system_prompt=SYSTEM_PROMPT,
+            max_turns=10,
+            mcp_servers={"telehealth-tools": telehealth_server},
+            allowed_tools=[
+                "mcp__telehealth-tools__escalate_to_human",
+                "mcp__telehealth-tools__find_prescriptions", 
+                "mcp__telehealth-tools__check_refill_eligibility",
+                "mcp__telehealth-tools__submit_refill_request",
+                "mcp__telehealth-tools__find_appointments",
+                "mcp__telehealth-tools__check_in_for_appointment",
+                "mcp__telehealth-tools__cancel_appointment"
+            ]
+        )
+        
+        # Initialize client
+        self.client = None
+    
+    async def __aenter__(self):
+        """Async context manager entry"""
+        self.client = ClaudeSDKClient(self.options)
+        await self.client.__aenter__()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit"""
+        if self.client:
+            await self.client.__aexit__(exc_type, exc_val, exc_tb)
+            self.client = None
     
     def load_session(self, session_id: str) -> Session:
         """Load session from disk"""
@@ -588,82 +619,51 @@ class TelehealthService:
         with open(session_file, 'w') as f:
             json.dump(asdict(session), f, indent=2)
     
-    async def send_message(self, session_id: str, message: str) -> dict:
-        """Send a message in a session, auto-creates if doesn't exist
+    async def send_message(self, message: str) -> dict:
+        """Send a message to the assistant
         
         Returns:
             dict with:
                 - response: str - the assistant's response text
-                - messages: list[dict] - full conversation history
                 - tool_calls: list[dict] - tools that were called
         """
-        # Load or create session
-        session = self.load_session(session_id)
+        if not self.client:
+            raise RuntimeError("Service must be used as async context manager")
         
-        # Add user message
-        session.messages.append({
-            "role": "user",
-            "content": message
-        })
-        
-        # Configure agent
-        options = ClaudeAgentOptions(
-            system_prompt=SYSTEM_PROMPT,
-            max_turns=10,
-            mcp_servers={"telehealth-tools": telehealth_server},
-            allowed_tools=[
-                "mcp__telehealth-tools__escalate_to_human",
-                "mcp__telehealth-tools__find_prescriptions", 
-                "mcp__telehealth-tools__check_refill_eligibility",
-                "mcp__telehealth-tools__submit_refill_request",
-                "mcp__telehealth-tools__find_appointments",
-                "mcp__telehealth-tools__check_in_for_appointment",
-                "mcp__telehealth-tools__cancel_appointment"
-            ]
-        )
-        
-        # Process message
+        # Send only the current message
         async def message_generator():
-            for msg in session.messages:
-                yield {
-                    "type": "user",
-                    "message": msg
-                }
+            yield {
+                "type": "user",
+                "message": {"role": "user", "content": message}
+            }
         
         response_text = ""
         tool_calls = []
         
-        async with ClaudeSDKClient(options) as client:
-            await client.query(message_generator())
-            
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            response_text += block.text
-                        elif hasattr(block, 'type') and block.type == 'tool_use':
-                            tool_calls.append({
-                                "name": block.name,
-                                "input": block.input
-                            })
+        await self.client.query(message_generator())
         
-        # Add assistant response to session
-        session.messages.append({
-            "role": "assistant",
-            "content": response_text
-        })
-        
-        # Save session
-        self.save_session(session)
+        async for message in self.client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        response_text += block.text
+                    elif hasattr(block, 'name') and hasattr(block, 'input'):
+                        # This is a tool use block
+                        tool_calls.append({
+                            "name": block.name,
+                            "input": block.input
+                        })
+                    elif hasattr(block, 'name') and hasattr(block, 'content'):
+                        # This is a tool result block - store for final result
+                        pass
         
         return {
             "response": response_text,
-            "messages": session.messages,
             "tool_calls": tool_calls
         }
     
-    async def stream_message(self, session_id: str, message: str):
-        """Stream a message in a session, yielding response chunks as they arrive
+    async def stream_message(self, message: str):
+        """Stream a message, yielding response chunks as they arrive
         
         Yields:
             dict with:
@@ -672,85 +672,58 @@ class TelehealthService:
                 - tool_name: str - tool name (only for type="tool_use")
                 - tool_input: dict - tool input (only for type="tool_use")
                 - full_response: str - complete response (only for type="done")
-                - messages: list[dict] - full conversation (only for type="done")
                 - tool_calls: list[dict] - all tools called (only for type="done")
         """
-        # Load or create session
-        session = self.load_session(session_id)
+        if not self.client:
+            raise RuntimeError("Service must be used as async context manager")
         
-        # Add user message
-        session.messages.append({
-            "role": "user",
-            "content": message
-        })
-        
-        # Configure agent
-        options = ClaudeAgentOptions(
-            system_prompt=SYSTEM_PROMPT,
-            max_turns=10,
-            mcp_servers={"telehealth-tools": telehealth_server},
-            allowed_tools=[
-                "mcp__telehealth-tools__escalate_to_human",
-                "mcp__telehealth-tools__find_prescriptions", 
-                "mcp__telehealth-tools__check_refill_eligibility",
-                "mcp__telehealth-tools__submit_refill_request",
-                "mcp__telehealth-tools__find_appointments",
-                "mcp__telehealth-tools__check_in_for_appointment",
-                "mcp__telehealth-tools__cancel_appointment"
-            ]
-        )
-        
-        # Process message
+        # Send only the current message
         async def message_generator():
-            for msg in session.messages:
-                yield {
-                    "type": "user",
-                    "message": msg
-                }
+            yield {
+                "type": "user",
+                "message": {"role": "user", "content": message}
+            }
         
         response_text = ""
         tool_calls = []
         
-        async with ClaudeSDKClient(options) as client:
-            await client.query(message_generator())
-            
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            response_text += block.text
-                            # Yield text chunk
-                            yield {
-                                "type": "text",
-                                "text": block.text
-                            }
-                        elif hasattr(block, 'type') and block.type == 'tool_use':
-                            tool_call = {
-                                "name": block.name,
-                                "input": block.input
-                            }
-                            tool_calls.append(tool_call)
-                            # Yield tool use
-                            yield {
-                                "type": "tool_use",
-                                "tool_name": block.name,
-                                "tool_input": block.input
-                            }
+        await self.client.query(message_generator())
         
-        # Add assistant response to session
-        session.messages.append({
-            "role": "assistant",
-            "content": response_text
-        })
-        
-        # Save session
-        self.save_session(session)
+        async for message in self.client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        response_text += block.text
+                        # Yield text chunk
+                        yield {
+                            "type": "text",
+                            "text": block.text
+                        }
+                    elif hasattr(block, 'name') and hasattr(block, 'input'):
+                        # This is a tool use block
+                        tool_call = {
+                            "name": block.name,
+                            "input": block.input
+                        }
+                        tool_calls.append(tool_call)
+                        # Yield tool use
+                        yield {
+                            "type": "tool_use",
+                            "tool_name": block.name,
+                            "tool_input": block.input
+                        }
+                    elif hasattr(block, 'name') and hasattr(block, 'content'):
+                        # This is a tool result block
+                        yield {
+                            "type": "tool_result",
+                            "tool_name": block.name,
+                            "tool_result": block.content
+                        }
         
         # Yield final result
         yield {
             "type": "done",
             "full_response": response_text,
-            "messages": session.messages,
             "tool_calls": tool_calls
         }
 
