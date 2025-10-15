@@ -192,7 +192,7 @@ async def run_escalation_eval(run_dir: Path, git_branch: str, git_commit: str, r
 def run(
     run_id: Optional[str] = typer.Option(None, help="Custom run ID (default: timestamp)")
 ):
-    """Run only the escalation evaluation"""
+    """Run escalation evaluation"""
     async def main():
         rid = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         git_branch, git_commit = get_git_info()
@@ -204,7 +204,7 @@ def run(
             f"Run ID: [yellow]{rid}[/yellow]\n"
             f"Git Branch: [blue]{git_branch}[/blue]\n"
             f"Git Commit: [dim]{git_commit}[/dim]\n"
-            f"Eval Type: [magenta]Escalation Only[/magenta]",
+            f"Eval Type: [magenta]Escalation[/magenta]",
             title="[bold]Evaluation Runner[/bold]",
             border_style="cyan"
         ))
@@ -213,69 +213,6 @@ def run(
         
         console.print(f"\n[dim]Results saved to {run_dir}/[/dim]")
         sys.exit(0 if passed else 1)
-    
-    asyncio.run(main())
-
-
-@app.command()
-def search(
-    run_id: Optional[str] = typer.Option(None, help="Custom run ID (default: timestamp)")
-):
-    """Run only the search knowledge base evaluation"""
-    async def main():
-        rid = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
-        git_branch, git_commit = get_git_info()
-        
-        run_dir = Path(f"evals/data/{rid}")
-        run_dir.mkdir(parents=True, exist_ok=True)
-        
-        console.print(Panel(
-            f"Run ID: [yellow]{rid}[/yellow]\n"
-            f"Git Branch: [blue]{git_branch}[/blue]\n"
-            f"Git Commit: [dim]{git_commit}[/dim]\n"
-            f"Eval Type: [magenta]Search Only[/magenta]",
-            title="[bold]Evaluation Runner[/bold]",
-            border_style="cyan"
-        ))
-        
-        passed = await run_search_eval(run_dir, git_branch, git_commit, rid)
-        
-        console.print(f"\n[dim]Results saved to {run_dir}/[/dim]")
-        sys.exit(0 if passed else 1)
-    
-    asyncio.run(main())
-
-
-@app.command()
-def all(
-    run_id: Optional[str] = typer.Option(None, help="Custom run ID (default: timestamp)")
-):
-    """Run all evaluations (escalation and search)"""
-    async def main():
-        rid = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
-        git_branch, git_commit = get_git_info()
-        
-        run_dir = Path(f"evals/data/{rid}")
-        run_dir.mkdir(parents=True, exist_ok=True)
-        
-        console.print(Panel(
-            f"Run ID: [yellow]{rid}[/yellow]\n"
-            f"Git Branch: [blue]{git_branch}[/blue]\n"
-            f"Git Commit: [dim]{git_commit}[/dim]\n"
-            f"Eval Type: [magenta]All Evaluations[/magenta]",
-            title="[bold]Evaluation Runner[/bold]",
-            border_style="cyan"
-        ))
-        
-        escalation_passed = await run_escalation_eval(run_dir, git_branch, git_commit, rid)
-        search_passed = await run_search_eval(run_dir, git_branch, git_commit, rid)
-        
-        all_passed = escalation_passed and search_passed
-        
-        console.print("\n[bold cyan]══════════════════════════════════════[/bold cyan]")
-        console.print(f"[dim]All results saved to {run_dir}/[/dim]")
-        
-        sys.exit(0 if all_passed else 1)
     
     asyncio.run(main())
 
