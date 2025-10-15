@@ -134,20 +134,20 @@ These should either escalate immediately or provide general info then escalate:
 
 ### Running Evals
 
-The evaluation framework now supports separate test suites with a CLI:
+The evaluation framework supports separate test suites with a CLI:
 
 ```bash
-# Run all evaluations (escalation + search)
-uv run python src/run_evals.py all
+# Run all evaluations (escalation + tool_call)
+uv run python src/run_evals.py run
 
 # Run only escalation evaluation
-uv run python src/run_evals.py escalation
+uv run python src/run_evals.py run --eval-type escalation
 
-# Run only search knowledge base evaluation
-uv run python src/run_evals.py search
+# Run only tool call evaluation
+uv run python src/run_evals.py run --eval-type tool_call
 
 # Use a custom run ID
-uv run python src/run_evals.py all --run-id my-test-run
+uv run python src/run_evals.py run --run-id my-test-run
 ```
 
 Each evaluation will:
@@ -163,27 +163,34 @@ Each evaluation will:
 - Tests when the agent escalates to humans
 - Validates safety-critical behavior
 - Checks controlled substance handling
+- 75 test cases covering common to emergency scenarios
 - Output: `escalation_results.json`, `escalation_eval.csv`
 
-**Search Evaluation** (`evals/search_tests.json`)
-- Tests knowledge base search functionality
-- Validates fuzzy matching and typo tolerance
-- Checks escalation for account-specific questions
-- Output: `search_results.json`, `search_eval.csv`
+**Tool Call Evaluation** (`evals/tool_call_tests.json`)
+- Tests whether correct tools are called for specific requests
+- Validates all 8 available tools are used appropriately
+- Checks tool selection logic and parameter handling
+- 30 test cases covering all tool scenarios
+- Output: `tool_call_results.json`, `tool_call_eval.csv`
 
 ### Adding Test Cases
 
-Edit `evals/escalation_tests.json` to add new test cases:
+**For escalation tests**, edit `evals/escalation_tests.json`:
 
 ```json
 {
-  "messages": [
-    {
-      "role": "user",
-      "content": "Your test message here"
-    }
-  ],
+  "messages": [{"role": "user", "content": "Your test message"}],
   "should_escalate": false,
+  "description": "Description of what this tests"
+}
+```
+
+**For tool call tests**, edit `evals/tool_call_tests.json`:
+
+```json
+{
+  "messages": [{"role": "user", "content": "Your test message"}],
+  "expected_tools": ["mcp__telehealth-tools__tool_name"],
   "description": "Description of what this tests"
 }
 ```
@@ -192,8 +199,9 @@ Edit `evals/escalation_tests.json` to add new test cases:
 
 The evaluation framework consists of:
 - `Dataset`: Contains test cases with messages and expected behavior
-- `run_function`: Executes the agent on test messages
-- `scorer`: Compares actual behavior to expected behavior
+- `agent`: Executes the telehealth service on test messages
+- `escalation_scorer`: Compares escalation behavior to expected behavior
+- `tool_call_scorer`: Validates correct tools are called for each scenario
 
 ## Project Structure
 
@@ -205,24 +213,23 @@ telehealth-agent/
 │   ├── knowledge_base.py        # Knowledge base documents and fuzzy search
 │   └── run_evals.py             # Evaluation runner (Typer CLI)
 ├── evals/                   # Evaluation framework
-│   ├── framework.py         # Eval framework (Dataset, scorer)
-│   ├── escalation_tests.json # Test cases for escalation behavior
-│   ├── search_tests.json    # Test cases for knowledge base search
+│   ├── framework.py         # Eval framework (Dataset, scorers)
+│   ├── escalation_tests.json # Test cases for escalation behavior (75 tests)
+│   ├── tool_call_tests.json # Test cases for tool call validation (30 tests)
 │   └── data/                # Evaluation results organized by run ID
 │       └── <run_id>/        # Each evaluation run gets its own directory
 │           ├── escalation_results.json
 │           ├── escalation_tests.json
 │           ├── escalation_eval.csv
-│           ├── search_results.json
-│           ├── search_tests.json
-│           └── search_eval.csv
+│           ├── tool_call_results.json
+│           ├── tool_call_tests.json
+│           └── tool_call_eval.csv
 ├── docs/                    # Documentation
 │   ├── CLAUDE.md            # Claude Code guidance
 │   ├── DESIGN.md            # Design philosophy
 │   ├── FEATURES.md          # Feature documentation
 │   ├── IMPLEMENTATION.md    # Implementation details
-│   ├── TESTING_GUIDE.md     # Testing guide
-│   └── SEARCH_IMPLEMENTATION.md  # Search feature documentation
+│   └── TESTING_GUIDE.md     # Testing guide
 ├── .sessions/               # Session storage (gitignored)
 ├── .eval_sessions/          # Eval session storage (gitignored)
 ├── pyproject.toml           # Project configuration
