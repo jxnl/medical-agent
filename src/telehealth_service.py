@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from claude_agent_sdk import tool, create_sdk_mcp_server, ClaudeAgentOptions, ClaudeSDKClient, AssistantMessage, TextBlock
+from src.knowledge_base import fuzzy_search_knowledge
 
 logger = logging.getLogger(__name__)
 
@@ -486,6 +487,69 @@ async def cancel_appointment(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@tool(
+    "search_knowledge_base",
+    "Search the knowledge base for information about insurance coverage, medication guidance, or billing and payment policies. Use this for general educational questions.",
+    {"query": str}
+)
+async def search_knowledge_base(args: dict[str, Any]) -> dict[str, Any]:
+    """Search knowledge base for insurance, medication, and billing information"""
+    query = args.get("query", "")
+    
+    if not query:
+        return {
+            "content": [{
+                "type": "text",
+                "text": "Please provide a search query to look up information."
+            }]
+        }
+    
+    # Perform fuzzy search
+    results = fuzzy_search_knowledge(query, top_k=3, threshold=60.0)
+    
+    if not results:
+        return {
+            "content": [{
+                "type": "text",
+                "text": f"I couldn't find information about '{query}' in the knowledge base. "
+                       f"This might require personalized information or be outside what I have access to. "
+                       f"I can connect you with someone who can help with this specific question."
+            }],
+            "no_results": True
+        }
+    
+    # Format results with scores
+    response = f"I found information about '{query}':\n\n"
+    
+    for i, result in enumerate(results, 1):
+        doc = result["document"]
+        score = result["score"]
+        
+        # Add confidence indicator
+        if score >= 85:
+            confidence = "High confidence"
+        elif score >= 70:
+            confidence = "Good match"
+        else:
+            confidence = "Partial match"
+        
+        response += f"{i}. {doc['title']} ({confidence})\n"
+        response += f"{doc['content']}\n"
+        response += f"Source: {doc['category'].title()}\n\n"
+    
+    # Add note about personalized info
+    response += "Note: This is general information. For questions specific to your plan, account, or personal medical situation, I'll need to connect you with someone who can access your records."
+    
+    return {
+        "content": [{
+            "type": "text",
+            "text": response
+        }],
+        "results_count": len(results),
+        "top_score": results[0]["score"] if results else 0
+    }
+
+
 # Create MCP server with tools
 telehealth_server = create_sdk_mcp_server(
     name="telehealth-tools",
@@ -497,7 +561,8 @@ telehealth_server = create_sdk_mcp_server(
         submit_refill_request,
         find_appointments,
         check_in_for_appointment,
-        cancel_appointment
+        cancel_appointment,
+        search_knowledge_base
     ]
 )
 
@@ -509,7 +574,8 @@ You can help with:
 1. Refilling prescriptions that are already on file
 2. Checking in for appointments or canceling them
 3. Providing general health information for common, routine questions (like colds, basic self-care, when to seek care)
-4. Connecting people to healthcare providers for complex or uncertain issues
+4. Answering questions about insurance, medications, and billing using the knowledge base
+5. Connecting people to healthcare providers for complex or uncertain issues
 
 HOW TO COMMUNICATE:
 - Write at a 9th-grade reading level for clarity
@@ -520,6 +586,21 @@ HOW TO COMMUNICATE:
 - When escalating, make it feel helpful, not like a rejection
 - Never use emojis
 
+USING THE KNOWLEDGE BASE:
+
+Use the search_knowledge_base tool for questions about:
+- Insurance coverage (PPO vs HMO, referrals, copays, etc.)
+- General medication information (side effects, interactions, how to take them)
+- Billing and payment questions (copays, deductibles, payment plans, disputes)
+
+IMPORTANT about knowledge base results:
+- High confidence matches (85+): Share the information confidently
+- Good matches (70-84): Share but acknowledge it's general information
+- Partial matches (60-69): Share cautiously and offer to escalate
+- No results or low scores: The information might be too specific or outside the knowledge base - escalate
+
+If the knowledge base returns general information but the patient clearly needs something specific to their situation (like "my plan" or "my deductible"), acknowledge the general info but escalate to someone who can access their personal records.
+
 WHEN TO PROVIDE INFORMATION VS ESCALATE:
 
 You CAN answer routine questions about:
@@ -527,6 +608,7 @@ You CAN answer routine questions about:
 - General wellness and prevention
 - When to seek medical care
 - What to expect with common conditions
+- General insurance, medication, and billing information from the knowledge base
 
 ESCALATE IMMEDIATELY for:
 - Specific diagnosis requests or concerns about serious symptoms
@@ -534,7 +616,8 @@ ESCALATE IMMEDIATELY for:
 - New medication requests (only refills of existing prescriptions are allowed)
 - Controlled substances like Adderall, Xanax, or pain medications
 - Prescription problems (expired, no refills, filled too recently)
-- Questions about bills, insurance, or medical records
+- Account-specific questions that need personal records (my copay amount, my deductible, my coverage)
+- Questions about bills, insurance claims, or medical records that need account access
 - Rescheduling appointments (only check-in and cancellation allowed)
 - Anything you're unsure about or that needs personalized medical judgment
 
@@ -552,7 +635,10 @@ Good: "I want to make sure you get the right help for this. Let me connect you w
 Bad: "Controlled substance detected."
 Good: "[Medication name] is a controlled medication that requires direct provider authorization. This is for your safety and follows federal regulations. I'm connecting you with a provider who can help."
 
-Remember: Your job is to handle simple tasks smoothly and provide helpful information for routine questions. Escalate when the situation needs personalized medical judgment. Patient safety always comes first. Be genuinely helpful, not just procedural."""
+Bad: "Search returned no results."
+Good: "I checked our knowledge base but couldn't find information about that. This might need personalized information from your account. Let me connect you with someone who can help."
+
+Remember: Your job is to handle simple tasks smoothly and provide helpful general information. Always cite when information comes from the knowledge base. Escalate when the situation needs personalized information or medical judgment. Patient safety always comes first. Be genuinely helpful, not just procedural."""
 
 
 class TelehealthService:
@@ -569,12 +655,13 @@ class TelehealthService:
             mcp_servers={"telehealth-tools": telehealth_server},
             allowed_tools=[
                 "mcp__telehealth-tools__escalate_to_human",
-                "mcp__telehealth-tools__find_prescriptions", 
+                "mcp__telehealth-tools__find_prescriptions",
                 "mcp__telehealth-tools__check_refill_eligibility",
                 "mcp__telehealth-tools__submit_refill_request",
                 "mcp__telehealth-tools__find_appointments",
                 "mcp__telehealth-tools__check_in_for_appointment",
-                "mcp__telehealth-tools__cancel_appointment"
+                "mcp__telehealth-tools__cancel_appointment",
+                "mcp__telehealth-tools__search_knowledge_base"
             ]
         )
         

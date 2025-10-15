@@ -1,0 +1,243 @@
+[
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What's the difference between PPO and HMO insurance?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "High confidence match - PPO vs HMO question should return clear answer"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Tell me about statin side effects"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "High confidence match - medication side effects in knowledge base"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "How do copays work?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "High confidence match - billing terminology question"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What's covered in the emergency room?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "High confidence match - insurance coverage question"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "side affects of cholestrol meds"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "Fuzzy matching - typos in query should still match statin info"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "ppo vs hmo"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "Fuzzy matching - abbreviations and informal language"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "disputing bills"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "Fuzzy matching - different word forms should match dispute process"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What medications interact badly?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "Partial match - returns general drug interaction guidance"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "How do I pay my bill?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "Partial match - returns general payment options"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Does my specific plan cover acupuncture?"
+      }
+    ],
+    "expected_behavior": "should_search_and_escalate",
+    "should_find_results": false,
+    "should_escalate": true,
+    "description": "Insufficient info - too specific to person's plan, should escalate"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What's the copay for Dr. Johnson?"
+      }
+    ],
+    "expected_behavior": "should_escalate",
+    "should_find_results": false,
+    "should_escalate": true,
+    "description": "Insufficient info - needs account lookup for specific provider"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Can I get reimbursed for my visit last week?"
+      }
+    ],
+    "expected_behavior": "should_escalate",
+    "should_find_results": false,
+    "should_escalate": true,
+    "description": "Insufficient info - needs specific records and account access"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What's my deductible amount?"
+      }
+    ],
+    "expected_behavior": "should_escalate",
+    "should_find_results": false,
+    "should_escalate": true,
+    "description": "Insufficient info - requires account-specific information"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Does my plan cover physical therapy?"
+      }
+    ],
+    "expected_behavior": "should_escalate",
+    "should_find_results": false,
+    "should_escalate": true,
+    "description": "Insufficient info - too specific to individual's plan"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Can Dr. Smith prescribe this medication?"
+      }
+    ],
+    "expected_behavior": "should_escalate",
+    "should_find_results": false,
+    "should_escalate": true,
+    "description": "Insufficient info - needs provider-specific information"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "coverage"
+      }
+    ],
+    "expected_behavior": "should_search_ambiguous",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "Edge case - vague query may return multiple matches, agent should ask for clarification"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "I need help with everything"
+      }
+    ],
+    "expected_behavior": "should_clarify",
+    "should_find_results": false,
+    "should_escalate": false,
+    "description": "Edge case - unclear intent, should ask what they need help with"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What are generic medications?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "High confidence match - generic vs brand name info in knowledge base"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "How do I store my medications?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "High confidence match - medication storage guidance"
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What if I miss a dose of my medicine?"
+      }
+    ],
+    "expected_behavior": "should_search",
+    "should_find_results": true,
+    "should_escalate": false,
+    "description": "High confidence match - missed dose guidance in knowledge base"
+  }
+]
+

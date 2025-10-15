@@ -7,6 +7,7 @@ A telehealth chatbot built with Claude Agent SDK that handles prescription refil
 - Prescription refill requests with safety checks
 - Appointment check-in and cancellation
 - General health information for routine questions
+- **Knowledge base search** for insurance, medication, and billing information
 - Automatic escalation to healthcare providers when needed
 - Session-based conversation storage
 - Real-time streaming responses
@@ -64,25 +65,111 @@ async for chunk in service.stream_message(session_id, "I have a cold"):
 
 Sessions are automatically created and stored in `.sessions/` directory as JSON files. Each session maintains the full conversation history.
 
+## Knowledge Base Search
+
+The agent can search a knowledge base of insurance, medication, and billing information to answer common questions. The search uses fuzzy string matching to handle typos and variations in phrasing.
+
+### What's in the Knowledge Base
+
+- **Insurance information**: PPO vs HMO, referrals, emergency coverage, out-of-network providers, prescription tiers, preventive care
+- **Medication guides**: Side effects, drug interactions, taking medications with food, storage, missed doses, antibiotics, generics vs brand names
+- **Billing information**: Copays vs deductibles, coinsurance, payment plans, disputing bills, claim submission, financial assistance, explanation of benefits
+
+### How It Works
+
+1. The agent uses the `search_knowledge_base` tool for insurance, medication, or billing questions
+2. The search returns results with confidence scores
+3. High-confidence matches (85+) are presented as reliable information
+4. Low-confidence or account-specific questions trigger escalation to a human
+
+### Manual Verification Questions
+
+Test these queries to verify the search feature is working correctly:
+
+#### High-Confidence Matches (should return clear answers)
+
+- "What's the difference between PPO and HMO insurance?"
+- "Tell me about statin side effects"
+- "How do copays work?"
+- "What's covered in the emergency room?"
+- "What are generic medications?"
+- "How do I store my medications?"
+
+#### Fuzzy Matching (tests typo tolerance)
+
+- "side affects of cholestrol meds" (typos should still match statin information)
+- "ppo vs hmo" (abbreviations and informal language)
+- "disputing bills" (different word forms should match dispute process)
+
+#### Should Return Partial Information
+
+- "What medications interact badly?" (returns general drug interaction guidance)
+- "How do I pay my bill?" (returns general payment options)
+- "What if I miss a dose?" (returns general missed dose guidance)
+
+#### Should Escalate (insufficient information)
+
+These should either escalate immediately or provide general info then escalate:
+
+- "Does my plan cover physical therapy?" (too specific to individual plan)
+- "What's my deductible amount?" (requires account lookup)
+- "Can Dr. Smith prescribe this medication?" (needs provider-specific information)
+- "What's the copay for Dr. Johnson?" (needs account and provider details)
+- "Can I get reimbursed for my visit last week?" (needs specific records)
+
+#### Edge Cases
+
+- "coverage" (too vague - should ask for clarification or return multiple matches)
+- "I need help with everything" (unclear intent - should ask what they need)
+- "When is my appointment?" (unrelated to knowledge base - should use appointment tools instead)
+
+### Expected Behavior
+
+- The agent should cite the source (insurance, medications, or billing) when providing information
+- General information should be clearly marked as such, with a note that personal situations may differ
+- When search returns results but the question is account-specific, the agent should provide the general information and then offer to escalate for personal details
+- When no results are found, the agent should gracefully escalate to a human
+
 ## Evaluation
 
 ### Running Evals
 
-Test the escalation behavior with the evaluation framework:
+The evaluation framework now supports separate test suites with a CLI:
 
 ```bash
-uv run python src/run_evals.py
+# Run all evaluations (escalation + search)
+uv run python src/run_evals.py all
+
+# Run only escalation evaluation
+uv run python src/run_evals.py escalation
+
+# Run only search knowledge base evaluation
+uv run python src/run_evals.py search
+
+# Use a custom run ID
+uv run python src/run_evals.py all --run-id my-test-run
 ```
 
-This will:
-- Load test cases from `evals/escalation_tests.json`
+Each evaluation will:
+- Load test cases from the appropriate JSON file
 - Run all tests in parallel for faster execution
-- Check if escalation behavior matches expectations using `escalation_scorer`
-- Display results with pass/fail summary
-- Save results to run-specific directory:
-  - `evals/data/<run_id>/results.json` - Full evaluation results
-  - `evals/data/<run_id>/escalation_tests.json` - Test cases used
-  - `evals/data/<run_id>/escalation_eval.csv` - CSV summary
+- Score behavior against expectations
+- Display detailed results with pass/fail summary
+- Save results to run-specific directory `evals/data/<run_id>/`
+
+### Evaluation Types
+
+**Escalation Evaluation** (`evals/escalation_tests.json`)
+- Tests when the agent escalates to humans
+- Validates safety-critical behavior
+- Checks controlled substance handling
+- Output: `escalation_results.json`, `escalation_eval.csv`
+
+**Search Evaluation** (`evals/search_tests.json`)
+- Tests knowledge base search functionality
+- Validates fuzzy matching and typo tolerance
+- Checks escalation for account-specific questions
+- Output: `search_results.json`, `search_eval.csv`
 
 ### Adding Test Cases
 
@@ -113,23 +200,29 @@ The evaluation framework consists of:
 ```
 telehealth-agent/
 ├── src/                     # Source code
-│   ├── telehealth_service.py    # Core service with session management
-│   ├── telehealth_bot.py         # Interactive CLI
-│   └── run_evals.py             # Evaluation runner
+│   ├── telehealth_service.py    # Core service with session management and tools
+│   ├── telehealth_bot.py        # Interactive CLI
+│   ├── knowledge_base.py        # Knowledge base documents and fuzzy search
+│   └── run_evals.py             # Evaluation runner (Typer CLI)
 ├── evals/                   # Evaluation framework
 │   ├── framework.py         # Eval framework (Dataset, scorer)
 │   ├── escalation_tests.json # Test cases for escalation behavior
+│   ├── search_tests.json    # Test cases for knowledge base search
 │   └── data/                # Evaluation results organized by run ID
 │       └── <run_id>/        # Each evaluation run gets its own directory
-│           ├── results.json
+│           ├── escalation_results.json
 │           ├── escalation_tests.json
-│           └── escalation_eval.csv
+│           ├── escalation_eval.csv
+│           ├── search_results.json
+│           ├── search_tests.json
+│           └── search_eval.csv
 ├── docs/                    # Documentation
 │   ├── CLAUDE.md            # Claude Code guidance
 │   ├── DESIGN.md            # Design philosophy
 │   ├── FEATURES.md          # Feature documentation
 │   ├── IMPLEMENTATION.md    # Implementation details
-│   └── TESTING_GUIDE.md     # Testing guide
+│   ├── TESTING_GUIDE.md     # Testing guide
+│   └── SEARCH_IMPLEMENTATION.md  # Search feature documentation
 ├── .sessions/               # Session storage (gitignored)
 ├── .eval_sessions/          # Eval session storage (gitignored)
 ├── pyproject.toml           # Project configuration
@@ -146,6 +239,7 @@ The agent follows these escalation rules:
 - Prescription refills (when eligible)
 - Appointment check-in and cancellation
 - General guidance on when to seek care
+- **General insurance, medication, and billing questions** (via knowledge base search)
 
 **Escalates immediately for:**
 - Specific diagnosis requests
@@ -154,5 +248,6 @@ The agent follows these escalation rules:
 - New medication requests
 - Controlled substances
 - Prescription issues (expired, no refills, etc.)
-- Insurance or billing questions
+- **Account-specific insurance, billing, or coverage questions** (requires personal records)
+- Medical record access requests
 

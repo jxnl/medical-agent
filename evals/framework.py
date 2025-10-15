@@ -28,24 +28,31 @@ class Dataset:
 
 async def agent(messages: list[dict]) -> tuple[list[dict], str]:
     """Run telehealth service on messages
-    
+
     Args:
         messages: List of message dicts with role and content
-        
+
     Returns:
         Tuple of (full conversation history including agent responses, agent version)
     """
-    service = TelehealthService(sessions_dir=".eval_sessions")
-    session_id = str(uuid.uuid4())
-    
-    # Process each message in sequence
-    all_messages = []
-    for msg in messages:
-        if msg["role"] == "user":
-            result = await service.send_message(session_id, msg["content"])
-            all_messages = result["messages"]
-    
-    return all_messages, service.version
+    async with TelehealthService(sessions_dir=".eval_sessions") as service:
+        # Process each message in sequence
+        all_messages = []
+        for msg in messages:
+            if msg["role"] == "user":
+                # Add user message to history
+                all_messages.append({"role": "user", "content": msg["content"]})
+
+                # Send message and get response
+                result = await service.send_message(msg["content"])
+
+                # Add assistant response to history
+                all_messages.append({
+                    "role": "assistant",
+                    "content": result["response"]
+                })
+
+        return all_messages, service.version
 
 
 def escalation_scorer(test_case: dict, output_messages: list[dict]) -> float:
