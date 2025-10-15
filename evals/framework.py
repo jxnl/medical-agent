@@ -26,18 +26,19 @@ class Dataset:
         )
 
 
-async def agent(messages: list[dict]) -> tuple[list[dict], str]:
+async def agent(messages: list[dict]) -> tuple[list[dict], str, list[dict]]:
     """Run telehealth service on messages
 
     Args:
         messages: List of message dicts with role and content
 
     Returns:
-        Tuple of (full conversation history including agent responses, agent version)
+        Tuple of (full conversation history including agent responses, agent version, tool_calls)
     """
     async with TelehealthService(sessions_dir=".eval_sessions") as service:
         # Process each message in sequence
         all_messages = []
+        all_tool_calls = []
         for msg in messages:
             if msg["role"] == "user":
                 # Add user message to history
@@ -51,11 +52,14 @@ async def agent(messages: list[dict]) -> tuple[list[dict], str]:
                     "role": "assistant",
                     "content": result["response"]
                 })
+                
+                # Collect tool calls
+                all_tool_calls.extend(result.get("tool_calls", []))
 
-        return all_messages, service.version
+        return all_messages, service.version, all_tool_calls
 
 
-def escalation_scorer(test_case: dict, output_messages: list[dict]) -> float:
+def escalation_scorer(test_case: dict, output_messages: list[dict], tool_calls: list[dict] = None) -> float:
     """Score based on escalation behavior
     
     Args:
@@ -63,6 +67,7 @@ def escalation_scorer(test_case: dict, output_messages: list[dict]) -> float:
             - messages: input messages
             - should_escalate: expected behavior (bool)
         output_messages: Full conversation history from agent
+        tool_calls: List of tool calls made (optional, not used for this scorer)
         
     Returns:
         1.0 for pass, 0.0 for fail
@@ -91,6 +96,40 @@ def escalation_scorer(test_case: dict, output_messages: list[dict]) -> float:
     
     # Score is 1.0 if behavior matches expectation, 0.0 otherwise
     return 1.0 if escalated == should_escalate else 0.0
+
+
+def tool_call_scorer(test_case: dict, output_messages: list[dict], tool_calls: list[dict] = None) -> float:
+    """Score based on whether expected tools were called
+    
+    Args:
+        test_case: Dict containing:
+            - messages: input messages
+            - expected_tools: list of tool names that should be called
+        output_messages: Full conversation history from agent (not used)
+        tool_calls: List of tool calls made during execution
+        
+    Returns:
+        1.0 for pass (at least one expected tool was called), 0.0 for fail
+    """
+    expected_tools = test_case.get("expected_tools", [])
+    
+    if not expected_tools:
+        # If no tools are expected, pass if no tools were called
+        return 1.0 if not tool_calls else 0.0
+    
+    if not tool_calls:
+        # Expected tools but none were called
+        return 0.0
+    
+    # Get list of tool names that were called
+    called_tool_names = [call.get("name") for call in tool_calls]
+    
+    # Check if at least one expected tool was called
+    for expected_tool in expected_tools:
+        if expected_tool in called_tool_names:
+            return 1.0
+    
+    return 0.0
 
 
 async def run_eval(dataset: Dataset, 
@@ -122,19 +161,30 @@ async def run_eval(dataset: Dataset,
         
         # Handle both old and new function signatures
         if isinstance(result, tuple):
-            output_messages, agent_version = result
+            if len(result) == 3:
+                output_messages, agent_version, tool_calls = result
+            elif len(result) == 2:
+                output_messages, agent_version = result
+                tool_calls = []
+            else:
+                output_messages = result[0]
+                agent_version = "unknown"
+                tool_calls = []
         else:
             output_messages = result
             agent_version = "unknown"
+            tool_calls = []
         
-        # Score the output
-        score = scorer_fn(test_case, output_messages)
+        # Score the output (pass tool_calls to scorer)
+        score = scorer_fn(test_case, output_messages, tool_calls)
         
         # Record result
         return {
             "test_case_index": i,
             "input": test_case["messages"],
             "expected_escalation": test_case.get("should_escalate", False),
+            "expected_tools": test_case.get("expected_tools", []),
+            "tool_calls": tool_calls,
             "output": output_messages,
             "score": score,
             "passed": score == 1.0,
